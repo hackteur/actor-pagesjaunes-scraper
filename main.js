@@ -23,7 +23,7 @@ Apify.main(async () => {
         const term = encodeURIComponent(input.search.trim());
         const loc = encodeURIComponent(input.location.trim());
         await requestQueue.addRequest({
-            url: `https://www.yellowpages.com/search?search_terms=${term}&geo_location_terms=${loc}`,
+            url: `https://www.pagesjaunes.fr/annuaire/chercherlespros?quoiqui=${term}&ou=${loc}&univers=pagesjaunes&idOu=`,
         });
     }
 
@@ -81,7 +81,7 @@ Apify.main(async () => {
 
             // Process result list
             const results = [];
-            const resultElems = $('.search-results .result');
+            const resultElems = $('.bi-list > li');
 
             for (const r of resultElems.toArray()) {
                 const jThis = $(r);
@@ -89,20 +89,20 @@ Apify.main(async () => {
                     const text = jThis.find(selector).text().trim();
                     return text.length > 0 ? text : undefined;
                 };
-                const businessSlug = jThis.find('a.business-name').attr('href');
-                const address = getText('.adr')
+                const businessSlug = atob(JSON.parse(jThis.find('a.bi-denomination').attr('data-pjlb')).url);
+                const address = getText('.bi-address a')
                     || jThis
-                        .find('.adr')
+                        .find('.bi-address')
                         .nextUntil('p')
                         .toArray()
                         .map((l) => $(l).text().trim())
                         .join(', ');
                 const categories = jThis
-                    .find('.categories a')
+                    .find('.bi-tags-list li')
                     .toArray()
                     .map((c) => $(c).text().trim());
-                const rating = jThis.find('.result-rating').attr('class');
-                const rCount = getText('.result-rating .count');
+                const rating = getText(jThis.find('.bi-note h4'));
+                const rCount = getText('.bi-rating');
                 const website = jThis
                     .find('a.track-visit-website')
                     .attr('href');
@@ -111,10 +111,10 @@ Apify.main(async () => {
                 const image = jThis.find('a.photo img').attr('src');
                 const result = {
                     isAd: getText('.ad-pill') === 'Ad' || undefined,
-                    url: businessSlug ? `https://www.yellowpages.com${businessSlug}` : undefined,
-                    name: getText('.info .n a'),
+                    url: businessSlug ? `https://www.pagesjaunes.fr${businessSlug}` : undefined,
+                    name: getText('h3'),
                     address: address.length > 0 ? address : undefined,
-                    phone: getText('.info .phone'),
+                    phone: getText('.number-contact span:last'),
                     website,
                     rating: rating ? parseRating(rating) : undefined,
                     ratingCount: rCount
@@ -159,11 +159,17 @@ Apify.main(async () => {
             // Store results and enqueue next page
             await dataset.pushData(results);
 
-            const nextUrl = $('.pagination .next').attr('href');
+            const nextInfos = $('.pagination .next').attr('data-pjlb');
+            var nextUrl = null;
+            if (nextInfos){
+                nextUrl = atob(JSON.parse(nextInfos).url);
+                
+            }
+
 
             if (nextUrl) {
                 const nextPageReq = await requestQueue.addRequest({
-                    url: `http://www.yellowpages.com${nextUrl}`,
+                    url: `https://www.pagesjaunes.fr${nextUrl}`,
                 });
 
                 if (!nextPageReq.wasAlreadyPresent) {
